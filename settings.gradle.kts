@@ -19,4 +19,5 @@ plugins {
 
 rootProject.name = "kotlin-experiments"
 
+include(":spring-data-jpa")
 include(":ksp")

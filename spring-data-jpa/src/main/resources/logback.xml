@@ -1,0 +1,20 @@
+<configuration>
+    <appender name="jsonEncoder" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <levelValue>[ignore]</levelValue>
+                <version>[ignore]</version>
+            </fieldNames>
+            <jsonGeneratorDecorator class="net.logstash.logback.decorate.PrettyPrintingJsonGeneratorDecorator"/>
+        </encoder>
+
+        <filter class="com.fardjad.learning.logback.CustomLogFilter"/>
+    </appender>
+
+    <root level="error">
+        <appender-ref ref="jsonEncoder"/>
+    </root>
+
+    <logger name="org.testcontainers" level="warn"/>
+    <logger name="org.hibernate.engine.transaction.jta" level="off"/>
+</configuration>
