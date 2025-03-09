@@ -58,31 +58,14 @@ class MyProcessorProviderTest {
                 import kotlin.collections.List
                 import kotlin.collections.Set
                 
-                @Entity(name = "")
-                @Table(
-                  name = "test",
-                  catalog = "",
-                  schema = "",
-                  uniqueConstraints = arrayOf(),
-                  indexes = arrayOf(),
-                )
+                @Entity
+                @Table(name = "test")
                 public data class TestDataJpaFriendly(
                   @Id
-                  @GeneratedValue(
-                    strategy = GenerationType.IDENTITY,
-                    generator = "",
-                  )
+                  @GeneratedValue(strategy = GenerationType.IDENTITY)
                   @Column(
                     name = "id",
                     nullable = false,
-                    unique = false,
-                    insertable = true,
-                    updatable = true,
-                    columnDefinition = "",
-                    table = "",
-                    length = 255,
-                    precision = 0,
-                    scale = 0,
                   )
                   public open val id: String?,
                   public open val prop2: Int,

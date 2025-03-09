@@ -140,7 +140,7 @@ private class MyProcessor(
                 .addAnnotations(
                     classDeclaration.annotations.toList()
                         .filterNot { it.shortName.asString() == "MyAnnotation" }
-                        .map { it.toAnnotationSpec() }
+                        .map { it.toAnnotationSpec(true) }
                 )
                 .primaryConstructor(constructor)
                 .addProperties(
@@ -149,7 +149,7 @@ private class MyProcessor(
                             .addModifiers(KModifier.OPEN)
                             .initializer(property.simpleName.asString())
                             .addAnnotations(
-                                property.annotations.toList().map { it.toAnnotationSpec() }
+                                property.annotations.toList().map { it.toAnnotationSpec(true) }
                             )
                             .build()
                     }.toList()

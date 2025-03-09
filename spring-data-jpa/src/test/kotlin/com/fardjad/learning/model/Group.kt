@@ -23,7 +23,6 @@ data class Group(
     @ManyToMany(
         fetch = FetchType.LAZY,
         cascade = [CascadeType.ALL],
-        targetEntity = PersonJpaFriendly::class,
     )
     @JoinTable(
         name = "groups_people",
