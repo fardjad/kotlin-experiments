@@ -27,7 +27,7 @@ class MyTest {
 
     @Test
     fun test() {
-        val people = List(100) { peopleRepository.saveAndFlush(PersonJpaFriendly(id = null, name = "Person $it")) }
+        val people = List(100) { peopleRepository.saveAndFlush(PersonJpaFriendly(name = "Person $it")) }
         groupRepository.saveAndFlush(GroupJpaFriendly(name = "Group 1", people = people.toMutableSet()))
 
         entityManager.clear()

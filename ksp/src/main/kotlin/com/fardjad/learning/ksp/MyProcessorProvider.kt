@@ -128,7 +128,11 @@ private class MyProcessor(
             val constructor = FunSpec.constructorBuilder()
                 .addParameters(
                     properties.map { property ->
-                        ParameterSpec.builder(property.simpleName.asString(), property.type.resolve().toTypeName())
+                        val typeName = property.type.resolve().toTypeName()
+                        val defaultValue = if (typeName.isNullable) CodeBlock.of("null") else null
+
+                        ParameterSpec.builder(property.simpleName.asString(), typeName)
+                            .apply { if (defaultValue != null) defaultValue(defaultValue) }
                             .build()
                     }.toList()
                 )

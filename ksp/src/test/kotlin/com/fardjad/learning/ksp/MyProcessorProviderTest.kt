@@ -67,7 +67,7 @@ class MyProcessorProviderTest {
                     name = "id",
                     nullable = false,
                   )
-                  public open val id: String?,
+                  public open val id: String? = null,
                   public open val prop2: Int,
                   public open val prop3: List<String>,
                   public open val prop4: Set<Something>,
