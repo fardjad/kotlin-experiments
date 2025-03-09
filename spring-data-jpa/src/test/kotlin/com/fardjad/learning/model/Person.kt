@@ -1,11 +1,11 @@
 package com.fardjad.learning.model
 
-import com.fardjad.learning.ksp.MyAnnotation
+import com.fardjad.learning.ksp.GenerateJPAFriendlyDataClass
 import jakarta.persistence.*
 
 @Entity
 @Table(name = "people")
-@MyAnnotation
+@GenerateJPAFriendlyDataClass
 data class Person(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -13,5 +13,5 @@ data class Person(
     val id: Long? = null,
 
     @Column(name = "name", nullable = false)
-    val name: String
+    val name: String,
 )

@@ -29,6 +29,8 @@ dependencies {
     testImplementation("dev.zacsweers.kctfork:ksp:$kotlinCompileTestingVersion")
 
     implementation("org.hibernate.orm:hibernate-core:6.6.9.Final")
+
+    testImplementation("com.facebook:ktfmt:0.54")
 }
 
 sourceSets.main {

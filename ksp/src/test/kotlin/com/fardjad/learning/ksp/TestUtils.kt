@@ -2,8 +2,8 @@
 
 package com.fardjad.learning.ksp
 
+import com.facebook.ktfmt.format.Formatter
 import com.tschuchort.compiletesting.*
-import org.intellij.lang.annotations.Language
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.junit.jupiter.api.Assertions.assertEquals
 import java.nio.file.Path
@@ -14,7 +14,7 @@ fun compile(
 ) = KotlinCompilation().apply {
     this.sources = sourceFiles.asList()
     this.configureKsp(useKsp2 = true) {
-        symbolProcessorProviders.add(MyProcessorProvider())
+        symbolProcessorProviders.add(GenerateJPAFriendlyDataClassProcessorProvider())
     }
     this.workingDir = workingDir.toFile()
     this.inheritClassPath = true
@@ -22,10 +22,14 @@ fun compile(
     this.messageOutputStream = System.out
 }.compile()
 
-fun assertSourceEquals(@Language("kotlin") expected: String, actual: String) =
-    assertEquals(expected.trimIndent(), actual.trimIndent())
+fun JvmCompilationResult.sourceFor(fileName: String) = sourcesGeneratedBySymbolProcessor
+    .find { it.name == fileName }
+    ?.readText()
+    ?.trimIndent() ?: throw IllegalArgumentException("Could not find file $fileName")
 
-fun JvmCompilationResult.sourceFor(fileName: String) =
-    sourcesGeneratedBySymbolProcessor
-        .find { it.name == fileName }
-        ?.readText() ?: throw IllegalArgumentException("Could not find file $fileName")
+fun assertCodeEquals(expected: String, actual: String) {
+    val formattedExpected = Formatter.format(expected)
+    val formattedActual = Formatter.format(actual)
+
+    assertEquals(formattedExpected, formattedActual)
+}

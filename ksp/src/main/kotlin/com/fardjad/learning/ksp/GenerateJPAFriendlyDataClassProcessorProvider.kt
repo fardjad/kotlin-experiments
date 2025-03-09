@@ -9,20 +9,10 @@ import com.squareup.kotlinpoet.ksp.addOriginatingKSFile
 import com.squareup.kotlinpoet.ksp.toAnnotationSpec
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
+import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Id
 import org.hibernate.annotations.NaturalId
 import kotlin.reflect.KClass
-
-@AutoService(SymbolProcessorProvider::class)
-class MyProcessorProvider : SymbolProcessorProvider {
-    override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
-        return MyProcessor(
-            options = environment.options,
-            codeGenerator = environment.codeGenerator,
-            logger = environment.logger
-        )
-    }
-}
 
 private fun KSPropertyDeclaration.hasAnnotation(annotationClass: KClass<out Annotation>, resolver: Resolver): Boolean {
     val annotationDeclaration =
@@ -31,13 +21,15 @@ private fun KSPropertyDeclaration.hasAnnotation(annotationClass: KClass<out Anno
     return annotations.any { it.annotationType.resolve().declaration == annotationDeclaration }
 }
 
-private class MyProcessor(
+private val hibernateProxy = ClassName("org.hibernate.proxy", "HibernateProxy")
+
+private class GenerateJPAFriendlyDataClassProcessor(
     private val options: Map<String, String>,
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger
 ) : SymbolProcessor {
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        val symbols = resolver.getSymbolsWithAnnotation(MyAnnotation::class.qualifiedName!!)
+        val symbols = resolver.getSymbolsWithAnnotation(GenerateJPAFriendlyDataClass::class.qualifiedName!!)
         val unableToProcess = symbols.filterNot { it.validate() }
 
         symbols
@@ -53,7 +45,6 @@ private class MyProcessor(
             data: Unit
         ) {
             logger.info("MyProcessor options: $options")
-
             if (!classDeclaration.modifiers.contains(Modifier.DATA)) {
                 logger.error("@MyAnnotation can only be used on data classes")
             }
@@ -62,17 +53,35 @@ private class MyProcessor(
 
             val properties = classDeclaration.getAllProperties()
 
-            val naturalIdProps = properties.filter { it.hasAnnotation(NaturalId::class, resolver) }.toList()
-            val idProps = properties.filter { it.hasAnnotation(Id::class, resolver) }.toList()
+            // equals() rules: first id, first embeddedId, multiple natural ids
+            val equalsProperties = listOf(
+                listOf(properties.firstOrNull {
+                    it.hasAnnotation(Id::class, resolver)
+                }),
+                listOf(properties.firstOrNull {
+                    it.hasAnnotation(EmbeddedId::class, resolver)
+                }),
+                properties.filter {
+                    it.hasAnnotation(NaturalId::class, resolver)
+                }.toList()
+            ).flatMap { it.filterNotNull() }
 
-            val keyProps = when {
-                naturalIdProps.isNotEmpty() -> naturalIdProps
-                idProps.isNotEmpty() -> idProps
-                else -> {
-                    logger.error("No @NaturalId or @Id properties found in ${classDeclaration.qualifiedName?.asString()}")
-                    emptyList()
-                }
-            }.toList()
+            val shouldDoNullCheckInEquals = equalsProperties.size == 1
+
+            // hashCode() rules: use the first embeddedId and all natural ids (if any)
+            // otherwise, use the class hash code
+            val hashCodeProperties = listOf(
+                listOf(properties.firstOrNull {
+                    it.hasAnnotation(EmbeddedId::class, resolver)
+                }),
+                properties.filter {
+                    it.hasAnnotation(NaturalId::class, resolver)
+                }.toList()
+            ).flatMap { it.filterNotNull() }
+
+            if (equalsProperties.isEmpty()) {
+                logger.error("There are no ID properties in ${classDeclaration.qualifiedName?.asString()}")
+            }
 
             val equalsFunction = FunSpec.builder("equals")
                 .addModifiers(KModifier.OVERRIDE, KModifier.FINAL)
@@ -81,20 +90,26 @@ private class MyProcessor(
                 .apply {
                     addStatement("if (this === other) return true")
                     addStatement("if (other == null) return false")
-                    addStatement("val oEffectiveClass = if (other is org.hibernate.proxy.HibernateProxy) other.hibernateLazyInitializer.persistentClass else other.javaClass")
-                    addStatement("val thisEffectiveClass = if (this is org.hibernate.proxy.HibernateProxy) this.hibernateLazyInitializer.persistentClass else this.javaClass")
+                    addStatement(
+                        "val oEffectiveClass = if (other is %T) other.hibernateLazyInitializer.persistentClass else other.javaClass",
+                        hibernateProxy
+                    )
+                    addStatement(
+                        "val thisEffectiveClass = if (this is %T) this.hibernateLazyInitializer.persistentClass else this.javaClass",
+                        hibernateProxy
+                    )
                     addStatement("if (thisEffectiveClass != oEffectiveClass) return false")
                     addStatement("other as $dataClassName")
 
-                    if (keyProps.isNotEmpty()) {
-                        keyProps.forEach { prop ->
-                            val name = prop.simpleName.asString()
-                            addStatement("if ($name != other.$name) return false")
+                    equalsProperties.forEach { prop ->
+                        val name = prop.simpleName.asString()
+
+                        if (shouldDoNullCheckInEquals) {
+                            addStatement("if ($name == null) return false")
                         }
-                        addStatement("return true")
-                    } else {
-                        addStatement("return false")
+                        addStatement("if ($name != other.$name) return false")
                     }
+                    addStatement("return true")
                 }
                 .build()
 
@@ -102,7 +117,17 @@ private class MyProcessor(
                 .addModifiers(KModifier.OVERRIDE, KModifier.FINAL)
                 .returns(Int::class)
                 .apply {
-                    addStatement("return if (this is org.hibernate.proxy.HibernateProxy) this.hibernateLazyInitializer.persistentClass.hashCode() else javaClass.hashCode()")
+                    if (hashCodeProperties.isNotEmpty()) {
+                        val propertiesExpression = hashCodeProperties.joinToString(", ") { prop ->
+                            prop.simpleName.asString()
+                        }
+                        addStatement("return %T.hash(%L)", ClassName("java.util", "Objects"), propertiesExpression)
+                    } else {
+                        addStatement(
+                            "return if (this is %T) this.hibernateLazyInitializer.persistentClass.hashCode() else javaClass.hashCode()",
+                            hibernateProxy
+                        )
+                    }
                 }
                 .build()
 
@@ -110,16 +135,7 @@ private class MyProcessor(
                 .addModifiers(KModifier.OVERRIDE)
                 .returns(String::class)
                 .apply {
-                    val propertiesExpression = keyProps.joinToString(", ") { prop ->
-                        val name = prop.simpleName.asString()
-                        """$name = $$name"""
-                    }
-
-                    if (keyProps.isNotEmpty()) {
-                        addStatement("return %L + \"( %L )\"", "this::class.simpleName", propertiesExpression)
-                    } else {
-                        addStatement("return %L", "\"${classDeclaration.simpleName}\"")
-                    }
+                    addStatement("return %L!!", "this::class.simpleName")
                 }
                 .build()
 
@@ -143,7 +159,7 @@ private class MyProcessor(
                     classDeclaration.annotations.toList()
                         .filterNot {
                             it.annotationType.resolve().declaration == resolver.getClassDeclarationByName(
-                                resolver.getKSNameFromString(MyAnnotation::class.qualifiedName!!)
+                                resolver.getKSNameFromString(GenerateJPAFriendlyDataClass::class.qualifiedName!!)
                             )
                         }
                         .map { it.toAnnotationSpec(true) }
@@ -181,3 +197,13 @@ private class MyProcessor(
     }
 }
 
+@AutoService(SymbolProcessorProvider::class)
+class GenerateJPAFriendlyDataClassProcessorProvider : SymbolProcessorProvider {
+    override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
+        return GenerateJPAFriendlyDataClassProcessor(
+            options = environment.options,
+            codeGenerator = environment.codeGenerator,
+            logger = environment.logger
+        )
+    }
+}

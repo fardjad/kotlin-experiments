@@ -1,6 +1,6 @@
 package com.fardjad.learning.model
 
-import com.fardjad.learning.ksp.MyAnnotation
+import com.fardjad.learning.ksp.GenerateJPAFriendlyDataClass
 import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -10,11 +10,10 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.JoinTable
 import jakarta.persistence.ManyToMany
 import jakarta.persistence.Table
-import org.hibernate.proxy.HibernateProxy
 
 @Entity
 @Table(name = "groups")
-@MyAnnotation
+@GenerateJPAFriendlyDataClass
 data class Group(
     @Id
     @Column(name = "name", nullable = false)
