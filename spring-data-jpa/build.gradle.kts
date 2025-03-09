@@ -2,6 +2,7 @@ val mockitoAgent = configurations.create("mockitoAgent")
 
 plugins {
     kotlin("jvm")
+    id("com.google.devtools.ksp")
 
     id("org.jetbrains.kotlin.plugin.spring") version "2.1.10"
     kotlin("plugin.jpa") version "2.1.10"
@@ -31,6 +32,9 @@ dependencies {
     mockitoAgent("org.mockito:mockito-core") {
         isTransitive = false
     }
+
+    implementation(project(":ksp"))
+    ksp(project(":ksp"))
 }
 
 kotlin {

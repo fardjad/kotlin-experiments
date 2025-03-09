@@ -1,9 +1,9 @@
 package com.fardjad.learning
 
 import com.fardjad.learning.database.PostgreSQLDatabaseExtension
-import com.fardjad.learning.model.Group
+import com.fardjad.learning.model.GroupJpaFriendly
 import com.fardjad.learning.model.GroupRepository
-import com.fardjad.learning.model.Person
+import com.fardjad.learning.model.PersonJpaFriendly
 import com.fardjad.learning.model.PersonRepository
 import jakarta.persistence.EntityManager
 import org.junit.jupiter.api.extension.ExtendWith
@@ -27,8 +27,8 @@ class MyTest {
 
     @Test
     fun test() {
-        val people = List(100) { peopleRepository.saveAndFlush(Person(name = "Person $it")) }
-        groupRepository.saveAndFlush(Group(name = "Group 1", people = people.toMutableSet()))
+        val people = List(100) { peopleRepository.saveAndFlush(PersonJpaFriendly(id = null, name = "Person $it")) }
+        groupRepository.saveAndFlush(GroupJpaFriendly(name = "Group 1", people = people.toMutableSet()))
 
         entityManager.clear()
 

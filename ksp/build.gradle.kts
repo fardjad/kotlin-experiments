@@ -27,6 +27,8 @@ dependencies {
 
     testImplementation("dev.zacsweers.kctfork:core:$kotlinCompileTestingVersion")
     testImplementation("dev.zacsweers.kctfork:ksp:$kotlinCompileTestingVersion")
+
+    implementation("org.hibernate.orm:hibernate-core:6.6.9.Final")
 }
 
 sourceSets.main {

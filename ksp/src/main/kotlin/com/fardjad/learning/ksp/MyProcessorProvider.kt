@@ -2,13 +2,11 @@ package com.fardjad.learning.ksp
 
 import com.google.auto.service.AutoService
 import com.google.devtools.ksp.processing.*
-import com.google.devtools.ksp.symbol.ClassKind
-import com.google.devtools.ksp.symbol.KSAnnotated
-import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSVisitorVoid
+import com.google.devtools.ksp.symbol.*
 import com.google.devtools.ksp.validate
 import com.squareup.kotlinpoet.*
-import com.squareup.kotlinpoet.ksp.toClassName
+import com.squareup.kotlinpoet.ksp.addOriginatingKSFile
+import com.squareup.kotlinpoet.ksp.toAnnotationSpec
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
 
@@ -21,6 +19,21 @@ class MyProcessorProvider : SymbolProcessorProvider {
             logger = environment.logger
         )
     }
+}
+
+private fun TypeName.isPrimitiveOrString() = when (this) {
+    is ClassName -> {
+        canonicalName in setOf(
+            "kotlin.Boolean", "kotlin.Byte", "kotlin.Short", "kotlin.Int", "kotlin.Long",
+            "kotlin.Float", "kotlin.Double", "kotlin.Char", "kotlin.String"
+        )
+    }
+
+    else -> false
+}
+
+private fun KSPropertyDeclaration.hasAnnotation(annotationName: String): Boolean {
+    return annotations.any { it.shortName.asString() == annotationName }
 }
 
 private class MyProcessor(
@@ -46,13 +59,72 @@ private class MyProcessor(
         ) {
             logger.info("MyProcessor options: $options")
 
-            if (classDeclaration.classKind != ClassKind.INTERFACE) {
-                logger.error("@MyAnnotation can only be used on interfaces")
+            if (!classDeclaration.modifiers.contains(Modifier.DATA)) {
+                logger.error("@MyAnnotation can only be used on data classes")
             }
 
-            val dataClassName = "${classDeclaration.simpleName.asString()}Impl"
+            val dataClassName = "${classDeclaration.simpleName.asString()}JpaFriendly"
 
             val properties = classDeclaration.getAllProperties()
+
+            val naturalIdProps = properties.filter { it.hasAnnotation("NaturalId") }.toList()
+            val idProps = properties.filter { it.hasAnnotation("Id") }.toList()
+            val primitiveProperties = properties.filter { it.type.resolve().toTypeName().isPrimitiveOrString() }
+
+            val keyProps = when {
+                naturalIdProps.isNotEmpty() -> naturalIdProps
+                idProps.isNotEmpty() -> idProps
+                else -> {
+                    logger.error("No @NaturalId or @Id properties found in ${classDeclaration.qualifiedName?.asString()}")
+                    emptyList()
+                }
+            }.toList()
+
+            val equalsFunction = FunSpec.builder("equals")
+                .addModifiers(KModifier.OVERRIDE, KModifier.FINAL)
+                .addParameter("other", Any::class.asTypeName().copy(nullable = true))
+                .returns(Boolean::class)
+                .apply {
+                    addStatement("if (this === other) return true")
+                    addStatement("if (other == null) return false")
+                    addStatement("val oEffectiveClass = if (other is org.hibernate.proxy.HibernateProxy) other.hibernateLazyInitializer.persistentClass else other.javaClass")
+                    addStatement("val thisEffectiveClass = if (this is org.hibernate.proxy.HibernateProxy) this.hibernateLazyInitializer.persistentClass else this.javaClass")
+                    addStatement("if (thisEffectiveClass != oEffectiveClass) return false")
+                    addStatement("other as $dataClassName")
+
+                    if (keyProps.isNotEmpty()) {
+                        keyProps.forEach { prop ->
+                            val name = prop.simpleName.asString()
+                            addStatement("if ($name != other.$name) return false")
+                        }
+                        addStatement("return true")
+                    } else {
+                        addStatement("return false")
+                    }
+                }
+                .build()
+
+            val hashCodeFunction = FunSpec.builder("hashCode")
+                .addModifiers(KModifier.OVERRIDE, KModifier.FINAL)
+                .returns(Int::class)
+                .apply {
+                    addStatement("return if (this is org.hibernate.proxy.HibernateProxy) this.hibernateLazyInitializer.persistentClass.hashCode() else javaClass.hashCode()")
+                }
+                .build()
+
+            val toStringFunction = FunSpec.builder("toString")
+                .addModifiers(KModifier.OVERRIDE)
+                .returns(String::class)
+                .apply {
+                    val classNameExpression = "this::class.simpleName"
+                    val propertiesExpression = primitiveProperties.joinToString(", ") { prop ->
+                        val name = prop.simpleName.asString()
+                        """$name = $$name"""
+                    }
+                    addStatement("return %L + \"( %L )\"", classNameExpression, propertiesExpression)
+                }
+                .build()
+
             val constructor = FunSpec.constructorBuilder()
                 .addParameters(
                     properties.map { property ->
@@ -63,17 +135,28 @@ private class MyProcessor(
                 .build()
 
             val dataClassImpl = TypeSpec.classBuilder(dataClassName)
+                .addOriginatingKSFile(classDeclaration.containingFile!!)
                 .addModifiers(KModifier.DATA)
-                .addSuperinterface(classDeclaration.toClassName())
+                .addAnnotations(
+                    classDeclaration.annotations.toList()
+                        .filterNot { it.shortName.asString() == "MyAnnotation" }
+                        .map { it.toAnnotationSpec() }
+                )
                 .primaryConstructor(constructor)
                 .addProperties(
                     properties.map { property ->
                         PropertySpec.builder(property.simpleName.asString(), property.type.resolve().toTypeName())
-                            .addModifiers(KModifier.OVERRIDE)
+                            .addModifiers(KModifier.OPEN)
                             .initializer(property.simpleName.asString())
+                            .addAnnotations(
+                                property.annotations.toList().map { it.toAnnotationSpec() }
+                            )
                             .build()
                     }.toList()
                 )
+                .addFunction(equalsFunction)
+                .addFunction(hashCodeFunction)
+                .addFunction(toStringFunction)
                 .build()
 
             val fileSpec = FileSpec
