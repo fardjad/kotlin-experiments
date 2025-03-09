@@ -85,7 +85,7 @@ class MyProcessorProviderTest {
                 
                   final override fun hashCode(): Int = if (this is org.hibernate.proxy.HibernateProxy) this.hibernateLazyInitializer.persistentClass.hashCode() else javaClass.hashCode()
                 
-                  override fun toString(): String = this::class.simpleName + "( id = ${'$'}id, prop2 = ${'$'}prop2 )"
+                  override fun toString(): String = this::class.simpleName + "( id = ${'$'}id )"
                 }
             """,
             compilationResult.sourceFor("TestDataJpaFriendly.kt")

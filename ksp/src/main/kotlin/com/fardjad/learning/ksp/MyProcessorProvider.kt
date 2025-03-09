@@ -9,6 +9,9 @@ import com.squareup.kotlinpoet.ksp.addOriginatingKSFile
 import com.squareup.kotlinpoet.ksp.toAnnotationSpec
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
+import jakarta.persistence.Id
+import org.hibernate.annotations.NaturalId
+import kotlin.reflect.KClass
 
 @AutoService(SymbolProcessorProvider::class)
 class MyProcessorProvider : SymbolProcessorProvider {
@@ -21,19 +24,11 @@ class MyProcessorProvider : SymbolProcessorProvider {
     }
 }
 
-private fun TypeName.isPrimitiveOrString() = when (this) {
-    is ClassName -> {
-        canonicalName in setOf(
-            "kotlin.Boolean", "kotlin.Byte", "kotlin.Short", "kotlin.Int", "kotlin.Long",
-            "kotlin.Float", "kotlin.Double", "kotlin.Char", "kotlin.String"
-        )
-    }
-
-    else -> false
-}
-
-private fun KSPropertyDeclaration.hasAnnotation(annotationName: String): Boolean {
-    return annotations.any { it.shortName.asString() == annotationName }
+private fun KSPropertyDeclaration.hasAnnotation(annotationClass: KClass<out Annotation>, resolver: Resolver): Boolean {
+    val annotationDeclaration =
+        resolver.getClassDeclarationByName(resolver.getKSNameFromString(annotationClass.qualifiedName!!))
+            ?: return false
+    return annotations.any { it.annotationType.resolve().declaration == annotationDeclaration }
 }
 
 private class MyProcessor(
@@ -47,12 +42,12 @@ private class MyProcessor(
 
         symbols
             .filter { it is KSClassDeclaration && it.validate() }
-            .forEach { it.accept(Visitor(), Unit) }
+            .forEach { it.accept(Visitor(resolver), Unit) }
 
         return unableToProcess.toList()
     }
 
-    private inner class Visitor : KSVisitorVoid() {
+    private inner class Visitor(private val resolver: Resolver) : KSVisitorVoid() {
         override fun visitClassDeclaration(
             classDeclaration: KSClassDeclaration,
             data: Unit
@@ -67,9 +62,8 @@ private class MyProcessor(
 
             val properties = classDeclaration.getAllProperties()
 
-            val naturalIdProps = properties.filter { it.hasAnnotation("NaturalId") }.toList()
-            val idProps = properties.filter { it.hasAnnotation("Id") }.toList()
-            val primitiveProperties = properties.filter { it.type.resolve().toTypeName().isPrimitiveOrString() }
+            val naturalIdProps = properties.filter { it.hasAnnotation(NaturalId::class, resolver) }.toList()
+            val idProps = properties.filter { it.hasAnnotation(Id::class, resolver) }.toList()
 
             val keyProps = when {
                 naturalIdProps.isNotEmpty() -> naturalIdProps
@@ -116,12 +110,16 @@ private class MyProcessor(
                 .addModifiers(KModifier.OVERRIDE)
                 .returns(String::class)
                 .apply {
-                    val classNameExpression = "this::class.simpleName"
-                    val propertiesExpression = primitiveProperties.joinToString(", ") { prop ->
+                    val propertiesExpression = keyProps.joinToString(", ") { prop ->
                         val name = prop.simpleName.asString()
                         """$name = $$name"""
                     }
-                    addStatement("return %L + \"( %L )\"", classNameExpression, propertiesExpression)
+
+                    if (keyProps.isNotEmpty()) {
+                        addStatement("return %L + \"( %L )\"", "this::class.simpleName", propertiesExpression)
+                    } else {
+                        addStatement("return %L", "\"${classDeclaration.simpleName}\"")
+                    }
                 }
                 .build()
 
@@ -143,7 +141,11 @@ private class MyProcessor(
                 .addModifiers(KModifier.DATA)
                 .addAnnotations(
                     classDeclaration.annotations.toList()
-                        .filterNot { it.shortName.asString() == "MyAnnotation" }
+                        .filterNot {
+                            it.annotationType.resolve().declaration == resolver.getClassDeclarationByName(
+                                resolver.getKSNameFromString(MyAnnotation::class.qualifiedName!!)
+                            )
+                        }
                         .map { it.toAnnotationSpec(true) }
                 )
                 .primaryConstructor(constructor)
