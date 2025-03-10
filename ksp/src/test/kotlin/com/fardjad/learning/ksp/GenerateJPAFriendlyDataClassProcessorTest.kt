@@ -18,7 +18,12 @@ import java.nio.file.Paths
 private fun GenerateJPAFriendlyDataClassProcessorTest.testCompilationResult(fixtureName: String) {
     val kotlinSource = SourceFile.kotlin("input.kt", loadResource("${fixtureName}.input.kt"))
 
-    val compilationResult = compile(tempDir, kotlinSource)
+    val compilationResult = compile(
+        provider = GenerateJPAFriendlyDataClassProcessorProvider(),
+        workingDir = tempDir,
+        options = mapOf(),
+        kotlinSource
+    )
     assertEquals(KotlinCompilation.ExitCode.OK, compilationResult.exitCode)
     assertCodeEquals(
         loadResource("${fixtureName}.expected.kt"),
@@ -29,7 +34,12 @@ private fun GenerateJPAFriendlyDataClassProcessorTest.testCompilationResult(fixt
 private fun GenerateJPAFriendlyDataClassProcessorTest.testCompileError(fixtureName: String, errorMessage: String) {
     val kotlinSource = SourceFile.kotlin("input.kt", loadResource("${fixtureName}.input.kt"))
 
-    val compilationResult = compile(tempDir, kotlinSource)
+    val compilationResult = compile(
+        provider = GenerateJPAFriendlyDataClassProcessorProvider(),
+        workingDir = tempDir,
+        options = mapOf(),
+        kotlinSource
+    )
     assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, compilationResult.exitCode)
     assertTrue(compilationResult.messages.contains(errorMessage))
 }
