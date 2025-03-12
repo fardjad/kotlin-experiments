@@ -8,6 +8,7 @@ import com.google.devtools.ksp.symbol.Visibility
 import com.google.devtools.ksp.validate
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ksp.addOriginatingKSFile
+import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.writeTo
 
 private fun TypeSpec.Builder.addRuntimeExceptionConstructors(visibility: Visibility? = null): TypeSpec.Builder {
@@ -97,7 +98,7 @@ private class GenerateExceptionClassProcessor(
             }
 
             for (nameArg in names) {
-                val exceptionTypeSpec = TypeSpec.classBuilder(nameArg)
+                val exceptionTypeSpec = TypeSpec.classBuilder("${classDeclaration.toClassName().simpleName}${nameArg}")
                     .superclass(ClassName(outputPackage, generatedExceptionSealedClass.name!!))
                     .addRuntimeExceptionConstructors()
                     .addOriginatingKSFile(classDeclaration.containingFile!!)

@@ -22,7 +22,7 @@ public sealed class GeneratedException: RuntimeException {
     ) : super(message, cause, enableSuppression, writableStackTrace)
 }
 
-public class TestException1 : GeneratedException {
+public class MyClassTestException1 : GeneratedException {
     public constructor() : super()
 
     public constructor(message: String) : super(message)
@@ -39,7 +39,7 @@ public class TestException1 : GeneratedException {
     ) : super(message, cause, enableSuppression, writableStackTrace)
 }
 
-public class TestException2 : GeneratedException {
+public class MyClassTestException2 : GeneratedException {
     public constructor() : super()
 
     public constructor(message: String) : super(message)
