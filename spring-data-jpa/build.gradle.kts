@@ -47,3 +47,7 @@ tasks.test {
     jvmArgs("-javaagent:${mockitoAgent.asPath}")
     useJUnitPlatform()
 }
+
+ksp {
+    arg("outputPackage", "com.fardjad.learning.errors.common")
+}
