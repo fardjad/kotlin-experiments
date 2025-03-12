@@ -4,15 +4,60 @@ import com.google.auto.service.AutoService
 import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.Visibility
 import com.google.devtools.ksp.validate
-import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.FileSpec
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ksp.addOriginatingKSFile
 import com.squareup.kotlinpoet.ksp.writeTo
+
+private fun TypeSpec.Builder.addRuntimeExceptionConstructors(visibility: Visibility? = null): TypeSpec.Builder {
+    val visibilityModifier = when (visibility) {
+        Visibility.INTERNAL -> KModifier.INTERNAL
+        Visibility.PRIVATE -> KModifier.PRIVATE
+        Visibility.PROTECTED -> KModifier.PROTECTED
+        else -> KModifier.PUBLIC
+    }
+
+    return this
+        .addFunction(
+            FunSpec.constructorBuilder()
+                .addModifiers(visibilityModifier)
+                .callSuperConstructor()
+                .build()
+        )
+        .addFunction(
+            FunSpec.constructorBuilder()
+                .addModifiers(visibilityModifier)
+                .addParameter("message", String::class)
+                .callSuperConstructor("message")
+                .build()
+        )
+        .addFunction(
+            FunSpec.constructorBuilder()
+                .addModifiers(visibilityModifier)
+                .addParameter("message", String::class)
+                .addParameter("cause", Throwable::class)
+                .callSuperConstructor("message", "cause")
+                .build()
+        )
+        .addFunction(
+            FunSpec.constructorBuilder()
+                .addModifiers(visibilityModifier)
+                .addParameter("cause", Throwable::class)
+                .callSuperConstructor("cause")
+                .build()
+        )
+        .addFunction(
+            FunSpec.constructorBuilder()
+                .addModifiers(visibilityModifier)
+                .addParameter("message", String::class)
+                .addParameter("cause", Throwable::class)
+                .addParameter("enableSuppression", Boolean::class)
+                .addParameter("writableStackTrace", Boolean::class)
+                .callSuperConstructor("message", "cause", "enableSuppression", "writableStackTrace")
+                .build()
+        )
+}
 
 private class GenerateExceptionClassProcessor(
     private val options: Map<String, String>,
@@ -34,8 +79,10 @@ private class GenerateExceptionClassProcessor(
             return unableToProcess.toList()
         }
 
-        val generatedExceptionInterface = TypeSpec.interfaceBuilder("GeneratedException")
+        val generatedExceptionSealedClass = TypeSpec.classBuilder("GeneratedException")
             .addModifiers(KModifier.SEALED)
+            .superclass(RuntimeException::class)
+            .addRuntimeExceptionConstructors(visibility = Visibility.PROTECTED)
             .build()
 
         val generatedExceptionTypeSpecs: MutableList<TypeSpec> = mutableListOf()
@@ -51,41 +98,8 @@ private class GenerateExceptionClassProcessor(
 
             for (nameArg in names) {
                 val exceptionTypeSpec = TypeSpec.classBuilder(nameArg)
-                    .superclass(RuntimeException::class)
-                    .addSuperinterface(ClassName(outputPackage, generatedExceptionInterface.name!!))
-                    .addFunction(
-                        FunSpec.constructorBuilder()
-                            .callSuperConstructor()
-                            .build()
-                    )
-                    .addFunction(
-                        FunSpec.constructorBuilder()
-                            .addParameter("message", String::class)
-                            .callSuperConstructor(CodeBlock.of("message"))
-                            .build()
-                    )
-                    .addFunction(
-                        FunSpec.constructorBuilder()
-                            .addParameter("message", String::class)
-                            .addParameter("cause", Throwable::class)
-                            .callSuperConstructor(CodeBlock.of("message, cause"))
-                            .build()
-                    )
-                    .addFunction(
-                        FunSpec.constructorBuilder()
-                            .addParameter("cause", Throwable::class)
-                            .callSuperConstructor(CodeBlock.of("cause"))
-                            .build()
-                    )
-                    .addFunction(
-                        FunSpec.constructorBuilder()
-                            .addParameter("message", String::class)
-                            .addParameter("cause", Throwable::class)
-                            .addParameter("enableSuppression", Boolean::class)
-                            .addParameter("writableStackTrace", Boolean::class)
-                            .callSuperConstructor(CodeBlock.of("message, cause, enableSuppression, writableStackTrace"))
-                            .build()
-                    )
+                    .superclass(ClassName(outputPackage, generatedExceptionSealedClass.name!!))
+                    .addRuntimeExceptionConstructors()
                     .addOriginatingKSFile(classDeclaration.containingFile!!)
                     .build()
 
@@ -96,7 +110,7 @@ private class GenerateExceptionClassProcessor(
         val fileSpec = FileSpec
             .builder(outputPackage, "GeneratedExceptionClasses")
             .apply {
-                addType(generatedExceptionInterface)
+                addType(generatedExceptionSealedClass)
                 generatedExceptionTypeSpecs.forEach { addType(it) }
             }
             .build()

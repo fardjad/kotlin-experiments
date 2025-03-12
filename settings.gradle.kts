@@ -21,3 +21,4 @@ rootProject.name = "kotlin-experiments"
 
 include(":spring-data-jpa")
 include(":ksp")
+include(":generate-exception-example")

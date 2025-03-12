@@ -5,9 +5,24 @@ import kotlin.Boolean
 import kotlin.String
 import kotlin.Throwable
 
-public sealed interface GeneratedException
+public sealed class GeneratedException: RuntimeException {
+    protected constructor() : super()
 
-public class TestException1 : RuntimeException, GeneratedException {
+    protected constructor(message: String) : super(message)
+
+    protected constructor(message: String, cause: Throwable) : super(message, cause)
+
+    protected constructor(cause: Throwable) : super(cause)
+
+    protected constructor(
+        message: String,
+        cause: Throwable,
+        enableSuppression: Boolean,
+        writableStackTrace: Boolean,
+    ) : super(message, cause, enableSuppression, writableStackTrace)
+}
+
+public class TestException1 : GeneratedException {
     public constructor() : super()
 
     public constructor(message: String) : super(message)
@@ -24,7 +39,7 @@ public class TestException1 : RuntimeException, GeneratedException {
     ) : super(message, cause, enableSuppression, writableStackTrace)
 }
 
-public class TestException2 : RuntimeException, GeneratedException {
+public class TestException2 : GeneratedException {
     public constructor() : super()
 
     public constructor(message: String) : super(message)
